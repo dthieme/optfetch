@@ -326,9 +326,24 @@ public class OptionsPriceFetcher
             final String chromeDriver = args[0];
             final String outputCsv = args[1];
             final List<String> symbols = new ArrayList<>();
-            for (int i = 2; i < args.length; i++)
-                symbols.add(args[i]);
-
+            // if third arg starts with file:, read from a list
+            if (args[2].startsWith("file:"))  {
+                final String path = args[2].substring("file:".length());
+                log.info("Reading symbols from " + path);
+                final List<String> lines = Files.readAllLines(Paths.get(path));
+                for (String line : lines) {
+                    line = line.trim().toUpperCase();
+                    if (!line.isEmpty()) {
+                        log.info("Adding symbol " + line);
+                        symbols.add(line);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 2; i < args.length; i++)
+                    symbols.add(args[i]);
+            }
             final OptionsPriceFetcher priceFetcher = new OptionsPriceFetcher(chromeDriver, outputCsv, symbols);
             priceFetcher.startFetch();
 

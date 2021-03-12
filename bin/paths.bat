@@ -20,4 +20,6 @@ SET CP=%CP%;%LIB%okhttp-3.11.0.jar
 SET CP=%CP%;%LIB%okio-1.14.0.jar
 SET CP=%CP%;%LIB%commons-exec-1.3.jar
 SET CP=%CP%;%LIB%commons-lang-2.6.jar
+SET CP=%CP%;%LIB%joda-time-2.9.9.jar
+SET CP=%CP%;%LIB%gson-2.8.2.jar
 echo on

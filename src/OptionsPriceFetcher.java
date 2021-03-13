@@ -302,36 +302,36 @@ public class OptionsPriceFetcher
 
     private List<String> extractExpirations(final String basePage) {
         final Collection<String> expirys = new LinkedHashSet<>();
-        log.info("Here 1");
+        //log.info("Here 1");
         final String valMarker = "value=\"";
-        log.info("Here 2");
+        //log.info("Here 2");
         final String[] lines = basePage.split("\n");
-        log.info("Here 3");
+        //log.info("Here 3");
         int lineNum = 0;
         for (String line : lines)
         {
-            log.info("Here 4");
+            //log.info("Here 4");
             lineNum++;
             //log.info("On line num " + lineNum);
             if (line.contains("<!-- ngRepeat: (key, expiration) in expirations track by $index -->"))
             {
-                log.info("Here 5");
+                //log.info("Here 5");
                 //log.info("Found expiry line: " + line);
                 int curIdx = 0;
                 while (true)
                 {
-                    log.info("Here 6");
+                    //log.info("Here 6");
                     curIdx = line.indexOf(valMarker, curIdx);
-                    log.info("Here 7");
+                    //log.info("Here 7");
                     final int startIdx = curIdx + valMarker.length();
-                    log.info("Here 8");
+                    //log.info("Here 8");
                     final int endIdx = line.indexOf('"', startIdx);
                     if (endIdx == -1)
                         break;
-                    log.info("Here 9 with start " + startIdx + " end idx " + endIdx);
+                    //log.info("Here 9 with start " + startIdx + " end idx " + endIdx);
                     final String expiry = line.substring(startIdx, endIdx);
                     //log.info("Got expiry " + expiry);
-                    log.info("Here 10");
+                    //log.info("Here 10");
                     if (expiry.contains("<!--"))
                     {
                         break;
@@ -340,14 +340,14 @@ public class OptionsPriceFetcher
                     {
                         expirys.add(expiry);
                     }
-                    log.info("Here 11");
+                    //log.info("Here 11");
                     curIdx = endIdx+1;
-                    log.info("CUR IDX NOW " + curIdx);
+                    //log.info("CUR IDX NOW " + curIdx);
                 }
-                log.info("Here 12");
+                //log.info("Here 12");
             }
         }
-        log.info("Here 13");
+        //log.info("Here 13");
         return new ArrayList<>(expirys);
     }
 

@@ -6,8 +6,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -60,12 +59,65 @@ public final class UptickOptionsPriceFetcher
         }
     }
 
+    private final /* inner */ class FetchTask implements Callable<Boolean>
+    {
+        private final String symbol;
+        private final OptionsPriceFetcher priceFetcher;
+        private final UptickConnection uptick;
+
+        public FetchTask(final String symbol, final OptionsPriceFetcher priceFetcher, final UptickConnection connection)
+        {
+            this.symbol = symbol;
+            this.priceFetcher = priceFetcher;
+            this.uptick = connection;
+        }
+
+        @Override public Boolean call() throws Exception
+        {
+            try
+            {
+                final Consumer<List<OptionsPriceFetcher.OptionsInfo>> handler = optionsInfoList -> {
+
+                    try
+                    {
+                        if (! optionsInfoList.isEmpty())
+                        {
+                            final List<List<String>> rows = new ArrayList<>();
+                            rows.add(OptionsPriceFetcher.OptionsInfo.getHeaderRows());
+                            for (OptionsPriceFetcher.OptionsInfo info : optionsInfoList)
+                            {
+                                rows.add(info.toRow());
+                            }
+                            uptick.sendReport(topic + "~" + symbol, rows);
+                        }
+                    }
+                    catch (Throwable t)
+                    {
+                        log.error("Error sending report " + t.getMessage(), t);
+                    }
+                };
+                log.info("Fetching " + symbol);
+                priceFetcher.fetch(symbol, handler);
+
+            }
+            catch (Throwable t)
+            {
+                log.equals("Error fetching symbol " + symbol);
+            }
+            finally
+            {
+                return true;
+            }
+        }
+    }
+
+
     private final /* inner */ class UptickPriceFetch implements Runnable
     {
         private final OptionsPriceFetcher priceFetcher;
         private final List<String> symbols;
         private final UptickConnection uptick;
-
+        private final ExecutorService fetcher = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() / 2);
 
         public UptickPriceFetch(final OptionsPriceFetcher priceFetcher, final List<String> symbols, final UptickConnection uptick)
         {
@@ -77,38 +129,21 @@ public final class UptickOptionsPriceFetcher
         @Override public void run()
         {
 
-            for (String symbol : symbols)
+            try
             {
-                try
+                final List<FetchTask> tasks = new ArrayList<>(symbols.size());
+                for (String symbol : symbols)
                 {
-                    final Consumer<List<OptionsPriceFetcher.OptionsInfo>> handler = optionsInfoList -> {
-
-                        try
-                        {
-                            if (! optionsInfoList.isEmpty())
-                            {
-                                final List<List<String>> rows = new ArrayList<>();
-                                rows.add(OptionsPriceFetcher.OptionsInfo.getHeaderRows());
-                                for (OptionsPriceFetcher.OptionsInfo info : optionsInfoList)
-                                {
-                                    rows.add(info.toRow());
-                                }
-                                uptick.sendReport(topic + "~" + symbol, rows);
-                            }
-                        }
-                        catch (Throwable t)
-                        {
-                            log.error("Error sending report " + t.getMessage(), t);
-                        }
-                    };
-                    log.info("Fetching " + symbol);
-                    priceFetcher.fetch(symbol, handler);
-
+                    tasks.add(new FetchTask(symbol, priceFetcher, uptick));
                 }
-                catch (Throwable t)
-                {
-                    log.equals("Error fetching symbol " + symbol);
+                final List<Future<Boolean>> results = fetcher.invokeAll(tasks);
+                for (Future<Boolean> result : results) {
+                    result.get();
                 }
+            }
+            catch (Throwable t)
+            {
+                log.error(t.getMessage(), t);
             }
         }
     }

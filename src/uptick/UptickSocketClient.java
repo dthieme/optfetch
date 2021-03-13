@@ -13,10 +13,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class UptickSocketClient
 {
     private static final Logger log = Logger.getLogger(UptickSocketClient.class);
-    private static final String ProdHost = "UPTICK-PROD1";
+    private static final String ProdHost = "broyhill.uptick.tech";
     private static final int ProdPort = 40001;
-    private static final String TestHost  = "10.10.112.76";
-    private static final int TestPort = 40011;
+
     private static final long ConnectionCheckFrequency = 5000;
     private static final long ReconnectTryInterval = 1000;
     private static final UptickSerializer serializer = new UptickSerializer();
@@ -37,9 +36,7 @@ public final class UptickSocketClient
         return new UptickSocketClient(ProdHost, ProdPort);
     }
 
-    public static UptickSocketClient newTestClient() {
-        return new UptickSocketClient(TestHost, TestPort);
-    }
+
 
     public UptickSocketClient(final String host, final int port)
     {

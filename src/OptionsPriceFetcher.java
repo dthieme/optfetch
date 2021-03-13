@@ -1,13 +1,16 @@
 import org.apache.log4j.Logger;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 
 public class OptionsPriceFetcher
@@ -16,20 +19,18 @@ public class OptionsPriceFetcher
     private static final String UrlBase = "https://www.barchart.com/stocks/quotes/~SYM~/options";
     private static final String UrlExpiry = UrlBase + "?expiration=~EXP~";
     private final String chromeDriverPath;
-    private final String outputCsv;
     private final List<String> symbols;
     private final ChromeDriver driver;
+    private final ExecutorService webpageFetchExecutor = Executors.newSingleThreadExecutor();
 
     public OptionsPriceFetcher(final String chromeDriver,
-                               final String outputCsv,
                                final List<String> symbols) {
         this.chromeDriverPath = chromeDriver;
-        this.outputCsv = outputCsv;
         this.symbols = symbols;
         driver = initDriver(chromeDriverPath);
     }
 
-    private void startFetch() {
+    public void startFetch(final String outputCsv) {
         int count = 1;
         log.info("Outputting info to " + outputCsv);
         final StringBuilder buf = new StringBuilder();
@@ -71,7 +72,30 @@ public class OptionsPriceFetcher
         }
     }
 
-    private static final /* inner */ class OptionsInfo
+
+
+    public void fetch(final String symbol, final Consumer<List<OptionsInfo>> handler) {
+        int count = 1;
+        final List<OptionsInfo> list = new ArrayList<>();
+        log.info("Fetching symbol " + symbol + " (" + count + "/" + symbols.size() + ")");
+        final String basePage = getBaseWebpage(symbol);
+        log.info("Got base page, extracting expirys");
+        final List<String> expirys = extractExpirations(basePage);
+        log.info("Got expirations for " + symbol + " :\n");
+        expirys.forEach(System.out::println);
+        int expCount = 1;
+        for (String expiry : expirys) {
+            log.info("Fetching expiry " + expiry + " : (" + expCount + "/" + expirys.size() + ")");
+            final String expiryPage = getExpiryWebpage(symbol, expiry);
+            final List<OptionsInfo> optionsInfoList = extractDataForExpiration(expiryPage, symbol, expiry);
+            list.addAll(optionsInfoList);
+            expCount++;
+        }
+        log.info("Fetched " + list.size() + " options info");
+        handler.accept(list);
+    }
+
+    public static final /* inner */ class OptionsInfo
     {
         private final String symbol;
         private final String contract;
@@ -144,27 +168,56 @@ public class OptionsPriceFetcher
             }
         }
 
+        public static List<String> getHeaderRows() {
+            final List<String> sb = new ArrayList<>();
+            sb.add("symbol");
+            sb.add("contract");
+            sb.add("expiry");
+            sb.add("put/call");
+            sb.add("strike");
+            sb.add("moneyness");
+            sb.add("bid");
+            sb.add("mid");
+            sb.add("ask");
+            sb.add("last");
+            sb.add("change");
+            sb.add("pctChange=");
+            sb.add("volume=");
+            sb.add("openInterest");
+            sb.add("volumeOpenInterestRatio");
+            sb.add("impliedVol");
+            sb.add("lastTrade\n");
+            return sb;
+        }
+
         public static String getHeader() {
             final StringBuilder sb = new StringBuilder();
-            sb.append("symbol,");
-            sb.append("contract,");
-            sb.append("expiry,");
-            sb.append("put/call,");
-            sb.append("strike,");
-            sb.append("moneyness,");
-            sb.append("bid,");
-            sb.append("mid,");
-            sb.append("ask,");
-            sb.append("last,");
-            sb.append("change,");
-            sb.append("pctChange=,");
-            sb.append("volume=,");
-            sb.append("openInterest,");
-            sb.append("volumeOpenInterestRatio,");
-            sb.append("impliedVol,");
-            sb.append("lastTrade\n");
+            getHeaderRows().forEach(r -> sb.append(r).append(","));
             return sb.toString();
         }
+
+        public List<String> toRow() {
+            final List<String> sb = new ArrayList<>();
+            sb.add(symbol);
+            sb.add(contract);
+            sb.add(expiry);
+            sb.add(putCall);
+            sb.add(strike);
+            sb.add(moneyness);
+            sb.add(bid);
+            sb.add(mid);
+            sb.add(ask);
+            sb.add(last);
+            sb.add(change);
+            sb.add(pctChange);
+            sb.add(volume);
+            sb.add(openInterest);
+            sb.add(volumeOpenInterestRatio);
+            sb.add(impliedVol);
+            sb.add(lastTrade);
+            return sb;
+        }
+
 
         public String toCsvRow() {
             final StringBuilder sb = new StringBuilder();
@@ -249,24 +302,36 @@ public class OptionsPriceFetcher
 
     private List<String> extractExpirations(final String basePage) {
         final Collection<String> expirys = new LinkedHashSet<>();
+        log.info("Here 1");
         final String valMarker = "value=\"";
+        log.info("Here 2");
         final String[] lines = basePage.split("\n");
+        log.info("Here 3");
         int lineNum = 0;
         for (String line : lines)
         {
+            log.info("Here 4");
             lineNum++;
             //log.info("On line num " + lineNum);
             if (line.contains("<!-- ngRepeat: (key, expiration) in expirations track by $index -->"))
             {
+                log.info("Here 5");
                 //log.info("Found expiry line: " + line);
                 int curIdx = 0;
                 while (true)
                 {
+                    log.info("Here 6");
                     curIdx = line.indexOf(valMarker, curIdx);
+                    log.info("Here 7");
                     final int startIdx = curIdx + valMarker.length();
+                    log.info("Here 8");
                     final int endIdx = line.indexOf('"', startIdx);
+                    if (endIdx == -1)
+                        break;
+                    log.info("Here 9 with start " + startIdx + " end idx " + endIdx);
                     final String expiry = line.substring(startIdx, endIdx);
                     //log.info("Got expiry " + expiry);
+                    log.info("Here 10");
                     if (expiry.contains("<!--"))
                     {
                         break;
@@ -275,12 +340,14 @@ public class OptionsPriceFetcher
                     {
                         expirys.add(expiry);
                     }
+                    log.info("Here 11");
                     curIdx = endIdx+1;
-
+                    log.info("CUR IDX NOW " + curIdx);
                 }
-
+                log.info("Here 12");
             }
         }
+        log.info("Here 13");
         return new ArrayList<>(expirys);
     }
 
@@ -296,16 +363,45 @@ public class OptionsPriceFetcher
     }
 
     private String getWebpageSource(final String url) {
-        log.info("Obtaining webpage " + url);
-        driver.get(url);
-        return driver.getPageSource();
+        final WebpageFetcher fetcher = new WebpageFetcher(url);
+        final Future<String> webpageResult = webpageFetchExecutor.submit(fetcher);
+        try
+        {
+            long t1 = System.currentTimeMillis();
+            log.info("Waiting for future result");
+            final String data = webpageResult.get(60, TimeUnit.SECONDS);
+            long t2 = System.currentTimeMillis();
+            log.info("Webpage data of length " + data.length() + " obtained in " + (t2- t1) + " ms");
+            return data;
+        }
+        catch (Exception e)
+        {
+            webpageResult.cancel(true);
+            log.info("Fetch of website " + url + " failed...retrying " + e.getMessage(), e);
+            return getWebpageSource(url);
+        }
     }
 
 
-    private static void printUsage() {
-        System.out.println("Usage java " + OptionsPriceFetcher.class + " path_to_chromedriver output_csv symbol1 [symbol2...]");
-        System.exit(0);
+    private final /* inner */ class WebpageFetcher implements Callable<String>
+    {
+        private final String url;
+
+        public WebpageFetcher(final String url)
+        {
+            this.url = url;
+        }
+
+        @Override public String call() throws Exception
+        {
+            log.info("Obtaining webpage " + url);
+            driver.get(url);
+            return driver.getPageSource();
+        }
     }
+
+
+
 
     private ChromeDriver initDriver(final String driverPath)
     {
@@ -314,6 +410,11 @@ public class OptionsPriceFetcher
         final ChromeOptions chromeOptions = new ChromeOptions();
         chromeOptions.addArguments("--headless");
         return new ChromeDriver(chromeOptions);
+    }
+
+    private static void printUsage() {
+        System.out.println("Usage java " + OptionsPriceFetcher.class + " path_to_chromedriver output_csv symbol1 [symbol2...]");
+        System.exit(0);
     }
 
 
@@ -344,8 +445,8 @@ public class OptionsPriceFetcher
                 for (int i = 2; i < args.length; i++)
                     symbols.add(args[i]);
             }
-            final OptionsPriceFetcher priceFetcher = new OptionsPriceFetcher(chromeDriver, outputCsv, symbols);
-            priceFetcher.startFetch();
+            final OptionsPriceFetcher priceFetcher = new OptionsPriceFetcher(chromeDriver, symbols);
+            priceFetcher.startFetch(outputCsv);
 
         }
         catch (Throwable t)

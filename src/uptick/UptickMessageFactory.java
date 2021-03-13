@@ -11,7 +11,7 @@ import java.util.List;
 public final class UptickMessageFactory
 {
     private static final Logger log = Logger.getLogger(UptickMessageFactory.class);
-    private static final String HeartbeatTopic = "DV/Heartbeat";
+    private static final String HeartbeatTopic = "Broyhill/Heartbeat";
     private static final UptickMessageInfoSerializer MessageInfoSerializer = new UptickMessageInfoSerializer();;
     private static final UptickMessageFactory instance = new UptickMessageFactory();
     static final short HeaderVersion = 1;
